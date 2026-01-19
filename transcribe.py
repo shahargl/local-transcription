@@ -9,6 +9,7 @@ Supports batch processing, speaker diarization, and multiple media formats.
 
 import argparse
 import gc
+import json
 import logging
 import os
 import sys
@@ -303,6 +304,11 @@ def parse_args() -> argparse.Namespace:
         help="Enable speaker diarization (requires HF_TOKEN environment variable)"
     )
     parser.add_argument(
+        "--diarize-only",
+        action="store_true",
+        help="Only run diarization on existing transcription (requires .json result file from previous run)"
+    )
+    parser.add_argument(
         "--model", 
         default=DEFAULT_MODEL, 
         help=f"Whisper model size/name (default: {DEFAULT_MODEL})"
@@ -348,45 +354,70 @@ def main():
     transcriber = Transcriber(model_size=args.model, device=device, language=language)
 
     # Load model once if not diarizing (heuristic optimization)
-    if not args.diarize:
+    # Skip model loading entirely for --diarize-only mode
+    if not args.diarize and not args.diarize_only:
         transcriber.load_model()
 
     for i, media_file in enumerate(files):
         print(f"\n--- Processing file {i+1}/{len(files)}: '{media_file}' ---")
+        base_name = os.path.splitext(media_file)[0]
+        json_file = f"{base_name}.json"
 
         try:
-            # 1. Transcribe
-            # If diarizing, ensuring clean slate might be safer for VRAM
-            if args.diarize:
-                # Re-init/ensure loaded
-                if not transcriber.model:
-                     transcriber.load_model()
-            
-            result = transcriber.transcribe(media_file)
-
-            # 2. Align
-            result = transcriber.align(result, media_file)
-
-            # 3. Diarize (Optional)
-            if args.diarize:
-                # Aggressive cleanup before diarization to save VRAM
-                # We delete the whisper model before loading the pyannote pipeline
-                transcriber.cleanup()
+            # Handle --diarize-only mode
+            if args.diarize_only:
+                if not os.path.exists(json_file):
+                    print(f"❌ Error: No existing transcription found at '{json_file}'")
+                    print("   Run transcription first without --diarize-only")
+                    continue
+                
+                print(f"Loading existing transcription from '{json_file}'...")
+                with open(json_file, "r", encoding="utf-8") as f:
+                    result = json.load(f)
                 
                 hf_token = os.environ.get("HF_TOKEN")
                 if not hf_token:
-                    print("Warning: HF_TOKEN not set. Skipping diarization.")
-                else:
-                    result = transcriber.diarize(result, media_file, hf_token)
+                    print("❌ Error: HF_TOKEN not set. Required for diarization.")
+                    continue
+                
+                result = transcriber.diarize(result, media_file, hf_token)
+            else:
+                # 1. Transcribe
+                # If diarizing, ensuring clean slate might be safer for VRAM
+                if args.diarize:
+                    # Re-init/ensure loaded
+                    if not transcriber.model:
+                         transcriber.load_model()
+                
+                result = transcriber.transcribe(media_file)
+
+                # 2. Align
+                result = transcriber.align(result, media_file)
+                
+                # Save intermediate result as JSON for potential --diarize-only later
+                with open(json_file, "w", encoding="utf-8") as f:
+                    json.dump(result, f, ensure_ascii=False, indent=2)
+                print(f"Intermediate result saved to '{json_file}'")
+
+                # 3. Diarize (Optional)
+                if args.diarize:
+                    # Aggressive cleanup before diarization to save VRAM
+                    # We delete the whisper model before loading the pyannote pipeline
+                    transcriber.cleanup()
+                    
+                    hf_token = os.environ.get("HF_TOKEN")
+                    if not hf_token:
+                        print("Warning: HF_TOKEN not set. Skipping diarization.")
+                    else:
+                        result = transcriber.diarize(result, media_file, hf_token)
 
             # 4. Save Output
             txt_content = format_output(
                 result, 
-                include_speakers=args.diarize, 
+                include_speakers=args.diarize or args.diarize_only, 
                 include_timestamps=args.timestamps
             )
             
-            base_name = os.path.splitext(media_file)[0]
             output_file = f"{base_name}.txt"
             
             with open(output_file, "w", encoding="utf-8") as f:
