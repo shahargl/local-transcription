@@ -3,7 +3,7 @@ name = "transcription"
 version = "0.1.0"
 description = "A CLI tool to transcribe audio/video files using WhisperX with support for speaker diarization"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 dependencies = [
     "python-dotenv>=1.0.0",
     "whisperx @ git+https://github.com/m-bain/whisperx.git",

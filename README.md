@@ -58,6 +58,75 @@ uv run transcribe.py --diarize interview.mp3
 
 **Note:** Transcription outputs are saved as `.txt` files in the same directory as the source media.
 
+### Re-processing Options
+
+| Flag | Description |
+|------|-------------|
+| `--diarize-only` | Re-run diarization on existing transcription (requires `.json` from previous run) |
+| `--reformat` | Regenerate `.txt` from existing `.json` without any processing |
+
+These are useful when you want to:
+- Add timestamps to an existing transcription: `uv run transcribe.py --reformat --timestamps file.mp3`
+- Re-run diarization with different settings: `uv run transcribe.py --diarize-only file.mp3`
+
+## Running on Google Colab
+
+You can run this on Google Colab to leverage free GPU acceleration. Here's how:
+
+### 1. Setup Cell
+
+```python
+# Install uv and clone the repo
+!curl -LsSf https://astral.sh/uv/install.sh | sh
+!git clone https://github.com/joroizin/local-transcription.git
+%cd local-transcription
+
+# Create a virtual environment with Python 3.13
+!~/.local/bin/uv venv --python 3.13
+
+# Install dependencies (whisperx from git to avoid PyPI conflicts)
+!~/.local/bin/uv pip install -p .venv/bin/python \
+    git+https://github.com/m-bain/whisperx.git \
+    python-dotenv
+
+# Set your HuggingFace token (required for diarization)
+import os
+os.environ["HF_TOKEN"] = "your_token_here"  # Get from https://huggingface.co/settings/tokens
+os.environ["MPLBACKEND"] = "agg"  # Fix matplotlib backend for Colab
+```
+
+### 2. Upload Your Audio File
+
+```python
+from google.colab import files
+uploaded = files.upload()  # Select your audio file
+```
+
+Or mount Google Drive:
+```python
+from google.colab import drive
+drive.mount('/content/drive')
+# Then use: /content/drive/MyDrive/path/to/file.mp3
+```
+
+### 3. Run Transcription
+
+```python
+# Basic transcription
+!.venv/bin/python transcribe.py your_file.mp3
+
+# With speaker diarization and timestamps
+!.venv/bin/python transcribe.py --diarize --timestamps your_file.mp3
+```
+
+### 4. Download Results
+
+```python
+from google.colab import files
+files.download('your_file.txt')
+files.download('your_file.json')  # Contains full data with timestamps
+```
+
 ## Disclaimer
 
 ⚠️ **Note:** This script was primarily "vibe-coded" and is intended mainly for personal use. It has not been rigorously tested for production environments. Use at your own risk.
