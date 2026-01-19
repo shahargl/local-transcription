@@ -309,6 +309,11 @@ def parse_args() -> argparse.Namespace:
         help="Only run diarization on existing transcription (requires .json result file from previous run)"
     )
     parser.add_argument(
+        "--reformat",
+        action="store_true",
+        help="Just regenerate .txt output from existing .json (no transcription or diarization)"
+    )
+    parser.add_argument(
         "--model", 
         default=DEFAULT_MODEL, 
         help=f"Whisper model size/name (default: {DEFAULT_MODEL})"
@@ -354,8 +359,8 @@ def main():
     transcriber = Transcriber(model_size=args.model, device=device, language=language)
 
     # Load model once if not diarizing (heuristic optimization)
-    # Skip model loading entirely for --diarize-only mode
-    if not args.diarize and not args.diarize_only:
+    # Skip model loading entirely for --diarize-only or --reformat mode
+    if not args.diarize and not args.diarize_only and not args.reformat:
         transcriber.load_model()
 
     for i, media_file in enumerate(files):
@@ -364,6 +369,33 @@ def main():
         json_file = f"{base_name}.json"
 
         try:
+            # Handle --reformat mode (just regenerate .txt from existing .json)
+            if args.reformat:
+                if not os.path.exists(json_file):
+                    print(f"❌ Error: No existing transcription found at '{json_file}'")
+                    print("   Run transcription first without --reformat")
+                    continue
+                
+                print(f"Loading existing transcription from '{json_file}'...")
+                with open(json_file, "r", encoding="utf-8") as f:
+                    result = json.load(f)
+                
+                # Check if result has speaker info
+                has_speakers = any("speaker" in seg for seg in result.get("segments", []))
+                
+                # Save Output with new formatting options
+                txt_content = format_output(
+                    result, 
+                    include_speakers=has_speakers, 
+                    include_timestamps=args.timestamps
+                )
+                
+                output_file = f"{base_name}.txt"
+                with open(output_file, "w", encoding="utf-8") as f:
+                    f.write(txt_content)
+                print(f"✅ Success! Reformatted output saved to '{output_file}'")
+                continue
+            
             # Handle --diarize-only mode
             if args.diarize_only:
                 if not os.path.exists(json_file):
