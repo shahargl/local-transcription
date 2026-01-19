@@ -16,6 +16,9 @@ import traceback
 import warnings
 from typing import List, Optional, Tuple, Set, Union, Dict, Any
 
+# Force unbuffered output for real-time progress display
+os.environ["PYTHONUNBUFFERED"] = "1"
+
 from dotenv import load_dotenv
 
 # Filter warnings immediately to keep output clean
@@ -78,7 +81,7 @@ class Transcriber:
 
     def __init__(self, model_size: str, device: str, language: Optional[str] = None):
         """
-        Initialize the Transcriber.
+        Initialize the Transcriber. 
 
         Args:
             model_size (str): Name of the Whisper model to use.
@@ -122,10 +125,13 @@ class Transcriber:
         if not self.model:
             self.load_model()
 
-        print(f"Loading audio: {os.path.basename(audio_path)}...")
+        print(f"Loading audio: {os.path.basename(audio_path)}...", flush=True)
         audio = whisperx.load_audio(audio_path)
-
-        print(f"Transcribing...")
+        
+        # Calculate audio duration for progress display
+        audio_duration = len(audio) / 16000  # whisperx uses 16kHz sample rate
+        print(f"Transcribing {audio_duration:.1f}s of audio...", flush=True)
+        
         try:
             result = self.model.transcribe(
                 audio, 
@@ -134,7 +140,7 @@ class Transcriber:
                 print_progress=True
             )
         except TypeError:
-            print("Warning: print_progress=True failed, trying default.")
+            print("Warning: print_progress=True failed, trying default.", flush=True)
             result = self.model.transcribe(
                 audio, 
                 batch_size=DEFAULT_BATCH_SIZE, 
@@ -201,10 +207,14 @@ class Transcriber:
         try:
             # We import here to avoid loading the pipeline if not needed
             from whisperx.diarize import DiarizationPipeline
+            from pyannote.audio.pipelines.utils.hook import ProgressHook
             
             diarize_model = DiarizationPipeline(use_auth_token=hf_token, device=self.device)
             audio = whisperx.load_audio(audio_path)
-            diarize_segments = diarize_model(audio)
+            
+            # Use ProgressHook to show diarization progress
+            with ProgressHook() as hook:
+                diarize_segments = diarize_model(audio, hook=hook)
             
             result = whisperx.assign_word_speakers(diarize_segments, result)
             print("Diarization complete.")
