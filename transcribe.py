@@ -203,21 +203,17 @@ class Transcriber:
         Returns:
             dict: The result with speaker labels assigned.
         """
-        print("Starting speaker diarization...")
+        print("Starting speaker diarization...", flush=True)
         try:
             # We import here to avoid loading the pipeline if not needed
             from whisperx.diarize import DiarizationPipeline
-            from pyannote.audio.pipelines.utils.hook import ProgressHook
             
             diarize_model = DiarizationPipeline(use_auth_token=hf_token, device=self.device)
             audio = whisperx.load_audio(audio_path)
-            
-            # Use ProgressHook to show diarization progress
-            with ProgressHook() as hook:
-                diarize_segments = diarize_model(audio, hook=hook)
+            diarize_segments = diarize_model(audio)
             
             result = whisperx.assign_word_speakers(diarize_segments, result)
-            print("Diarization complete.")
+            print("Diarization complete.", flush=True)
             return result
         except Exception as e:
             print(f"Diarization failed: {e}")
