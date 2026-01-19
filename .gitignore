@@ -1,0 +1,10 @@
+.DS_Store
+.env
+.venv
+*.m4a
+*.txt
+*.mp4
+*.mov
+*.opus
+*.mkv
+uv.lock
